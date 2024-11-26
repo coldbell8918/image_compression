@@ -9,17 +9,22 @@ class Analysis_net_17(nn.Module):
     Analysis net
     '''
     def __init__(self, out_channel_N=192):
+
         super(Analysis_net_17, self).__init__()
+
         self.conv1 = nn.Conv2d(3, out_channel_N, 9, stride=4, padding=4)
-        torch.nn.init.xavier_normal_(self.conv1.weight.data, (math.sqrt(2 * (3 + out_channel_N) / (6))))
-        torch.nn.init.constant_(self.conv1.bias.data, 0.01)
+        torch.nn.init.xavier_normal_(self.conv1.weight.data, (math.sqrt(2 * (3 + out_channel_N) / (6)))) # 가중치 초기화
+        torch.nn.init.constant_(self.conv1.bias.data, 0.01) # bias 초기화
         self.gdn1 = GDN(out_channel_N)
+
         self.conv2 = nn.Conv2d(out_channel_N, out_channel_N, 5, stride=2, padding=2)
         torch.nn.init.xavier_normal_(self.conv2.weight.data, math.sqrt(2))
         torch.nn.init.constant_(self.conv2.bias.data, 0.01)
         self.gdn2 = GDN(out_channel_N)
+        
         self.conv3 = nn.Conv2d(out_channel_N, out_channel_N, 5, stride=2, padding=2, bias=False)
         torch.nn.init.xavier_normal_(self.conv3.weight.data, math.sqrt(2))
+
         # torch.nn.init.constant_(self.conv3.bias.data, 0.01)
         # self.gdn3 = GDN(out_channel_N)
         # self.conv4 = nn.Conv2d(out_channel_N, out_channel_M, 5, stride=2, padding=2)

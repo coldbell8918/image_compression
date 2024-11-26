@@ -36,27 +36,36 @@ def load_model(model, f):
 
 
 class ImageCompressor(nn.Module):
+
     def __init__(self, out_channel_N=128):
         super(ImageCompressor, self).__init__()
-        self.Encoder = Analysis_net_17(out_channel_N=out_channel_N)
-        self.Decoder = Synthesis_net_17(out_channel_N=out_channel_N)
-        self.bitEstimator = BitEstimator(channel=out_channel_N)
+        self.Encoder = Analysis_net_17(out_channel_N=out_channel_N) # 인코더
+        self.Decoder = Synthesis_net_17(out_channel_N=out_channel_N) # 디코더
+        self.bitEstimator = BitEstimator(channel=out_channel_N) # 압축 효율성 평가
         self.out_channel_N = out_channel_N
 
     def forward(self, input_image):
+
+        # 노이즈
         quant_noise_feature = torch.zeros(input_image.size(0), self.out_channel_N, input_image.size(2) // 16, input_image.size(3) // 16).cuda()
         quant_noise_feature = torch.nn.init.uniform_(torch.zeros_like(quant_noise_feature), -0.5, 0.5)
+
+        # 특징 추출(인코더)
         feature = self.Encoder(input_image)
         batch_size = feature.size()[0]
         feature_renorm = feature
+
+        # 훈련 중일땐 노이즈, 아닐땐 quantization
         if self.training:
             compressed_feature_renorm = feature_renorm + quant_noise_feature
         else:
             compressed_feature_renorm = torch.round(feature_renorm)
+        
+        # 복원 이미지 생성(디코더)
         recon_image = self.Decoder(compressed_feature_renorm)
         # recon_image = prediction + recon_res
         clipped_recon_image = recon_image.clamp(0., 1.)
-        # distortion
+        # distortion(MSE)
         mse_loss = torch.mean((recon_image - input_image).pow(2))
 
         # def feature_probs_based_sigma(feature, sigma):
@@ -67,11 +76,13 @@ class ImageCompressor(nn.Module):
         #     total_bits = torch.sum(torch.clamp(-1.0 * torch.log(probs + 1e-10) / math.log(2.0), 0, 50))
         #     return total_bits, probs
 
+        # BPP 계산
         def iclr18_estimate_bits_z(z):
             prob = self.bitEstimator(z + 0.5) - self.bitEstimator(z - 0.5)
             total_bits = torch.sum(torch.clamp(-1.0 * torch.log(prob + 1e-10) / math.log(2.0), 0, 50))
             return total_bits, prob
 
+        # 전체 비트율 계산
         total_bits_feature, _ = iclr18_estimate_bits_z(compressed_feature_renorm)
         im_shape = input_image.size()
         bpp_feature = total_bits_feature / (batch_size * im_shape[2] * im_shape[3])

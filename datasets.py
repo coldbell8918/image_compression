@@ -76,7 +76,7 @@ class TestKodakDataset(Dataset):
         return len(self.image_path)
 
 def build_dataset():
-    train_set_dir = '/data1/liujiaheng/data/compression/Flick_patch/'
+    train_set_dir = '/home/park/IC/CompressionData/flicker_pathes'
     dataset, dataloader = get_train_loader(train_set_dir, 256, 4)
     for batch_idx, (image, path) in enumerate(dataloader):
         pdb.set_trace()

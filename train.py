@@ -155,7 +155,7 @@ def train(epoch, global_step):
 
 def testKodak(step):
     with torch.no_grad():
-        test_dataset = TestKodakDataset(data_dir='/data1/liujiaheng/data/compression/kodak')
+        test_dataset = TestKodakDataset(data_dir='/home/park/IC/CompressionData/flicker_testdata')
         test_loader = DataLoader(dataset=test_dataset, shuffle=False, batch_size=1, pin_memory=True, num_workers=1)
         net.eval()
         sumBpp = 0
@@ -195,43 +195,61 @@ def testKodak(step):
             logger.info("No need to add tensorboard")
 
 if __name__ == "__main__":
+
     args = parser.parse_args()
     torch.manual_seed(seed=args.seed)
+
+    # 로그 출력
     formatter = logging.Formatter('%(asctime)s - %(levelname)s] %(message)s')
     formatter = logging.Formatter('[%(asctime)s][%(filename)s][L%(lineno)d][%(levelname)s] %(message)s')
     stdhandler = logging.StreamHandler()
     stdhandler.setLevel(logging.INFO)
     stdhandler.setFormatter(formatter)
+
     logger.addHandler(stdhandler)
     dd = 1
-    save_path = os.path.join('checkpoints', args.name)
+
+    # 저장 경로 설정
+    save_path = os.path.join('checkpoints_1024', args.name)
     if args.name != '':
         os.makedirs(save_path, exist_ok=True)
         filehandler = logging.FileHandler(os.path.join(save_path, 'log.txt'))
         filehandler.setLevel(logging.INFO)
         filehandler.setFormatter(formatter)
         logger.addHandler(filehandler)
+    
+    # json 파일 파라미터 로딩 및 로깅
     logger.setLevel(logging.INFO)
     logger.info("image compression training")
     logger.info("config : ")
     logger.info(open(args.config).read())
     parse_config(args.config)
 
+    # 모델 생성
     model = ImageCompressor()
     if args.pretrain != '':
         logger.info("loading model:{}".format(args.pretrain))
         global_step = load_model(model, args.pretrain)
+    
+    # GPU 
     net = model.cuda()
     net = torch.nn.DataParallel(net, list(range(gpu_num)))
     parameters = net.parameters()
+
+    # For test
     if args.test:
         testKodak(global_step)
         exit(-1)
+    
+    # 옵티마이저
     optimizer = optim.Adam(parameters, lr=base_lr)
     # save_model(model, 0)
+
     global train_loader
     tb_logger = SummaryWriter(os.path.join(save_path, 'events'))
-    train_data_dir = '/data1/liujiaheng/data/compression/Flick_patch'
+
+    # 데이터셋 및 데이터로더 설장
+    train_data_dir = '/home/park/IC/CompressionData/flicker_traindata'
     train_dataset = Datasets(train_data_dir, image_size)
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=batch_size,
@@ -239,7 +257,10 @@ if __name__ == "__main__":
                               pin_memory=True,
                               num_workers=2)
     steps_epoch = global_step // (len(train_dataset) // (batch_size))# * gpu_num))
+
+    # 체크포인트 저장
     save_model(model, global_step, save_path)
+    # 학습 시작
     for epoch in range(steps_epoch, tot_epoch):
         adjust_learning_rate(optimizer, global_step)
         if global_step > tot_step:
