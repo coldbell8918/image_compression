@@ -8,11 +8,11 @@ from torchvision import transforms
 
 def compress_to_target_bpp(original_path, output_path, target_bpp):
     """
-    JPEG 품질을 조정하여 목표 BPP로 압축.
+    JPEG 2000 압축을 목표 BPP로 수행.
     
     Args:
         original_path (str): 원본 이미지 경로.
-        output_path (str): 압축된 JPEG 이미지 저장 경로.
+        output_path (str): 압축된 JPEG 2000 이미지 저장 경로.
         target_bpp (float): 목표 Bits Per Pixel (BPP).
 
     Returns:
@@ -26,42 +26,44 @@ def compress_to_target_bpp(original_path, output_path, target_bpp):
     # 목표 파일 크기 계산
     target_file_size = (target_bpp * total_pixels) / 8  # Bytes로 변환
 
-    # JPEG 품질 초기값 설정
-    quality = 95  # 높은 품질에서 시작
-    step = 5  # 품질 조정 간격
+    # JPEG 2000 압축 품질 초기값 설정
+    compression_ratio = 37  # 압축률 초기값
+    step = 5  # 압축률 조정 간격
 
     # 반복적으로 파일 크기 조정
     while True:
         # 임시 파일 저장
-        temp_path = "temp_output.jpg"
-        cv2.imwrite(temp_path, img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        temp_path = "temp_output.jp2"
+        cv2.imwrite(temp_path, img, [cv2.IMWRITE_JPEG2000_COMPRESSION_X1000, compression_ratio])
+        os.rename(temp_path, output_path)
+        break
 
         # 현재 파일 크기 확인
-        file_size = os.path.getsize(temp_path)
+        # file_size = os.path.getsize(temp_path)
 
-        # 목표 파일 크기에 근접하면 저장 후 종료
-        if abs(file_size - target_file_size) < 2048:  # 오차 허용 (1KB)
-            os.rename(temp_path, output_path)
-            break
+        # # 목표 파일 크기에 근접하면 저장 후 종료
+        # # if abs(file_size - target_file_size) < 2048:  # 오차 허용 (1KB)
+        # if file_size < target_file_size:
+        #     os.rename(temp_path, output_path)
+        #     break
 
-        # 품질 조정
-        if file_size > target_file_size:
-            quality -= step  # 파일이 크면 품질 낮춤
-        else:
-            quality += step  # 파일이 작으면 품질 높임
+        # # 압축률 조정
+        # if file_size > target_file_size:
+        #     compression_ratio += step  # 파일이 크면 압축 강화
+        # else:
+        #     compression_ratio -= step  # 파일이 작으면 압축 완화
 
-        # 품질 범위 제한
-        if quality < 1:
-            # 품질을 최저로 설정하여 마지막 시도
-            quality = 1
-            cv2.imwrite(temp_path, img, [cv2.IMWRITE_JPEG_QUALITY, quality])
-            # final_size = os.path.getsize(temp_path)
-            # if abs(final_size - target_file_size) < 1024:
-            #     os.rename(temp_path, output_path)
-            #     break
-            # raise ValueError("Cannot compress to the desired BPP even at the lowest quality.")
+        # # 압축률 범위 제한
+        # if compression_ratio < 1:
+        #     # 압축률 최저로 설정 후 마지막 시도
+        #     compression_ratio = 1
+        #     cv2.imwrite(temp_path, img, [cv2.IMWRITE_JPEG2000_COMPRESSION_X1000, compression_ratio])
+        #     final_size = os.path.getsize(temp_path)
+        #     if abs(final_size - target_file_size) < 1024:
+        #         os.rename(temp_path, output_path)
+        #         break
+        #     raise ValueError("Cannot compress to the desired BPP even at the highest compression.")
 
-    
     # 최종 BPP 계산
     final_bpp = (os.path.getsize(output_path) * 8) / total_pixels
     return final_bpp
@@ -96,10 +98,10 @@ def calculate_psnr(input_tensor, recon_tensor):
 
 # 원본 이미지 경로 및 압축 이미지 경로
 original_path = "/home/park/IC/CompressionData/kodak/kodim15.png"  # 원본 이미지
-output_path = "/home/park/IC/iclr_17_compression/kodak_result/jpeg_result_4096.jpeg"  # 압축된 이미지
+output_path = "/home/park/IC/iclr_17_compression/kodak_result/jpeg2000_result_4096.jp2"  # 압축된 이미지 (.jp2 확장자)
 
 # 목표 BPP 설정
-target_bpp = 0.8937
+target_bpp = 0.1924
 
 # 압축 수행
 final_bpp = compress_to_target_bpp(original_path, output_path, target_bpp)

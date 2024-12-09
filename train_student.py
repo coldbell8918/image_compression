@@ -80,12 +80,29 @@ def adjust_learning_rate(optimizer, global_step):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+def compute_gcka_loss(teacher_features, student_features):
+    """
+    Computes Global Centered Kernel Alignment (GCKA) between teacher and student features.
+    teacher_features: Feature map from the teacher model
+    student_features: Feature map from the student model
+    """
+    teacher_features = teacher_features.view(teacher_features.size(0), -1)
+    student_features = student_features.view(student_features.size(0), -1)
 
-def train(epoch, global_step):
+    teacher_gram = torch.mm(teacher_features, teacher_features.t())
+    student_gram = torch.mm(student_features, student_features.t())
+
+    teacher_norm = torch.norm(teacher_gram, p='fro')
+    student_norm = torch.norm(student_gram, p='fro')
+
+    gcka = torch.sum(teacher_gram * student_gram) / (teacher_norm * student_norm)
+    return 1 - gcka  # GCKA loss (1 - alignment)
+
+def train(epoch, global_step, teacher_model):
     logger.info("Epoch {} begin".format(epoch))
     net.train()
     global optimizer
-    elapsed, losses, psnrs, bpps, bpp_features, bpp_zs, mse_losses = [AverageMeter(print_freq) for _ in range(7)]
+    elapsed, losses, psnrs, bpps, bpp_features, bpp_zs, mse_losses, kd_losses = [AverageMeter(print_freq) for _ in range(8)]
     # model_time = 0
     # compute_time = 0
     # log_time = 0
@@ -94,12 +111,21 @@ def train(epoch, global_step):
         global_step += 1
         # print("debug", torch.max(input), torch.min(input))
         input = input.cuda()
+
+        # Teacher Features & Output
+        with torch.no_grad():
+            teacher_output, _, _ = teacher_model(input)
+
         clipped_recon_image, mse_loss, bpp = net(input)
         # print("debug", clipped_recon_image.shape, " ", mse_loss.shape, " ", bpp.shape)
         # print("debug", mse_loss, " ", bpp_feature, " ", bpp_z, " ", bpp)
         distribution_loss = bpp
         distortion = mse_loss
         rd_loss = train_lambda * distortion + distribution_loss
+
+        kd_loss = compute_gcka_loss(teacher_output, clipped_recon_image)
+        rd_loss = rd_loss + 0.1 * kd_loss
+
         optimizer.zero_grad()
         rd_loss.backward()
         def clip_gradient(optimizer, grad_clip):
@@ -122,6 +148,7 @@ def train(epoch, global_step):
             losses.update(rd_loss.item())
             bpps.update(bpp.item())
             mse_losses.update(mse_loss.item())
+            kd_losses.update(kd_loss.item())
             # t2 = time.time()
             # compute_time += (t2 - t0)
         if (global_step % print_freq) == 0:
@@ -130,6 +157,7 @@ def train(epoch, global_step):
             tb_logger.add_scalar('rd_loss', losses.avg, global_step)
             tb_logger.add_scalar('psnr', psnrs.avg, global_step)
             tb_logger.add_scalar('bpp', bpps.avg, global_step)
+            tb_logger.add_scalar('kd_loss', kd_losses.avg, global_step)
             process = global_step / tot_step * 100.0
             log = (' | '.join([
                 f'Step [{global_step}/{tot_step}={process:.2f}%]',
@@ -140,6 +168,7 @@ def train(epoch, global_step):
                 f'PSNR {psnrs.val:.3f} ({psnrs.avg:.3f})',
                 f'Bpp {bpps.val:.5f} ({bpps.avg:.5f})',
                 f'MSE {mse_losses.val:.5f} ({mse_losses.avg:.5f})',
+                f'KD Loss {kd_losses.val:.3f} ({kd_losses.avg:.3f})',
             ]))
             logger.info(log)
             # log_time = time.time() - begin
@@ -210,7 +239,7 @@ if __name__ == "__main__":
     dd = 1
 
     # 저장 경로 설정
-    save_path = os.path.join('checkpoints_4096_res', args.name)
+    save_path = os.path.join('checkpoints_128_res', args.name)
     if args.name != '':
         os.makedirs(save_path, exist_ok=True)
         filehandler = logging.FileHandler(os.path.join(save_path, 'log.txt'))
@@ -236,6 +265,12 @@ if __name__ == "__main__":
     net = torch.nn.DataParallel(net, list(range(gpu_num)))
     parameters = net.parameters()
 
+    pretrained_model_path = "/home/park/IC/iclr_17_compression/checkpoints_4096/baseline/iter_2502000.pth.tar"
+    teacher_model = ImageCompressor()
+    load_model(teacher_model, pretrained_model_path)
+    teacher_model = teacher_model.cuda()
+    teacher_model.eval()
+
     # For test
     if args.test:
         testKodak(global_step)
@@ -260,11 +295,12 @@ if __name__ == "__main__":
 
     # 체크포인트 저장
     save_model(model, global_step, save_path)
+
     # 학습 시작
     for epoch in range(steps_epoch, tot_epoch):
         adjust_learning_rate(optimizer, global_step)
         if global_step > tot_step:
             save_model(model, global_step, save_path)
             break
-        global_step = train(epoch, global_step)
+        global_step = train(epoch, global_step, teacher_model)
         save_model(model, global_step, save_path)

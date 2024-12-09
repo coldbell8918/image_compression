@@ -74,7 +74,7 @@ def visualize(pretrained_model_path, input_image_path, output_dir=None):
     # 복원 이미지 저장 (선택)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, "iter_2502000_2048_image.png")
+        output_path = os.path.join(output_dir, "iter_2502000_4096_image.png")
         recon_pil = transforms.ToPILImage()(recon_image)
         recon_pil.save(output_path)
 
@@ -113,7 +113,7 @@ def visualize(pretrained_model_path, input_image_path, output_dir=None):
 
 if __name__ == "__main__":
     # 학습된 모델 체크포인트 경로
-    pretrained_model_path = "/home/park/IC/iclr_17_compression/checkpoints_2048/baseline/iter_2502000.pth.tar"
+    pretrained_model_path = "/home/park/IC/iclr_17_compression/checkpoints_4096/baseline/iter_2502000.pth.tar"
     # 원본 비압축 이미지 경로
     input_image_path = "/home/park/IC/CompressionData/kodak/kodim15.png"
     # 복원 이미지를 저장할 디렉토리 (선택 사항)
